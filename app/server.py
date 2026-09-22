@@ -30,8 +30,8 @@ class Handler(BaseHTTPRequestHandler):
         elif re.fullmatch(r'/data/charts/[a-f0-9]{64}\.json\.gz', self.path):
             path = DATA / 'charts' / self.path.rsplit('/', 1)[-1]
             self.reply(200, path.read_bytes(), 'application/gzip') if path.exists() else self.reply(404, {'error':'Chart not available'})
-        elif self.path in ('/api/latest', '/api/intraday', '/api/update-status', '/api/history'):
-            name = {'/api/latest': 'latest.json', '/api/intraday': 'intraday.json', '/api/update-status': 'update-status.json', '/api/history': 'history.json'}[self.path]
+        elif self.path in ('/api/latest', '/api/intraday', '/api/update-status', '/api/history', '/api/plans'):
+            name = {'/api/latest': 'latest.json', '/api/intraday': 'intraday.json', '/api/update-status': 'update-status.json', '/api/history': 'history.json', '/api/plans': 'plans.json'}[self.path]
             payload = read_saved(name)
             self.reply(200 if payload else 503, payload or {'error': '첫 데이터 수집 중입니다.'})
         else:

@@ -18,6 +18,7 @@ from pathlib import Path
 from engine import evaluate_document, ENGINE_VERSION
 from history import record_snapshot, coverage, failure_category
 from market_data import NY, chart, daily_bars, intraday_quote, listed_symbols
+from plan_tracking import update_plans
 
 ROOT = Path(__file__).resolve().parent
 DATA = ROOT / 'data'
@@ -142,6 +143,13 @@ def update_daily(symbols=None, resume=False):
     if not valid:
         raise ValueError('No valid symbols; previous snapshot retained')
     snapshot = publish_progress(len(symbols))
+    def load_plan_bars(row):
+        payload = json.loads(gzip.decompress((DATA/'charts'/(row['chart_id']+'.json.gz')).read_bytes()))
+        return [dict(b, date=b['end']) for b in payload['charts']['daily']]
+    plans = update_plans(read_saved('plans.json', {}), snapshot['results'], as_of,
+                         snapshot['metadata']['generated_at'], load_plan_bars)
+    save('plans.json', plans)
+    save('latest.json', snapshot)
     save('history.json', record_snapshot(DATA, snapshot))
     observed = [monitor_row(row, row['_observed_quote']) for row in valid if row.get('_observed_quote')]
     save('intraday.json', dict(generated_at=utc_now().isoformat(), reference_as_of=as_of, watch_count=len(observed), universe_valid=len(valid), rows=observed, failures=[], note='일봉 수집 응답에 포함된 정규장 관측값. 종목별 시세 시각이 다르며 실시간 동시 스냅샷이 아님.'))

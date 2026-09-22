@@ -39,7 +39,7 @@ def document(bars):
 class EngineTests(unittest.TestCase):
     def test_old_invalid_bar_uses_contiguous_suffix(self):
         bars = make_bars(800)
-        bars[50]['volume'] = 0
+        bars[50]['volume'] = -1
         row = evaluate_document(document(bars))['results'][0]
         self.assertEqual(row['status'], 'ok')
         self.assertEqual(row['history_warning']['excluded_bars'], 51)
@@ -49,7 +49,7 @@ class EngineTests(unittest.TestCase):
 
     def test_history_break_requires_warmup_and_never_bridges(self):
         bars = make_bars(800)
-        bars[400]['volume'] = 0
+        bars[400]['volume'] = -1
         row = evaluate_document(document(bars))['results'][0]
         self.assertEqual(row['status'], 'unknown')
         self.assertIn('504 required', row['reasons'][0])
@@ -134,12 +134,20 @@ class EngineTests(unittest.TestCase):
         self.assertEqual(item["status"], "unknown")
         self.assertIn("stale data", item["reasons"][0])
 
-    def test_zero_volume_is_unknown(self):
+    def test_historical_zero_volume_preserves_price_history(self):
         bars = make_bars()
-        bars[-3]["volume"] = 0
-        item = evaluate_document(document(bars))["results"][0]
-        self.assertEqual(item["status"], "unknown")
-        self.assertIn("greater than zero", item["reasons"][0])
+        bars[-3]['volume'] = 0
+        item = evaluate_document(document(bars))['results'][0]
+        self.assertEqual(item['status'], 'ok')
+        self.assertIsNone(item['history_warning'])
+        self.assertEqual(len(item['charts']['daily']),len(bars))
+
+    def test_latest_zero_volume_is_unconfirmed(self):
+        bars = make_bars()
+        bars[-1]['volume'] = 0
+        item = evaluate_document(document(bars))['results'][0]
+        self.assertEqual(item['status'], 'unknown')
+        self.assertIn('latest session has zero volume',item['reasons'][0])
 
     def test_metadata_source_and_as_of_are_required(self):
         payload = document(make_bars())

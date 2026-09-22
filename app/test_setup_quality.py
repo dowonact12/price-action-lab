@@ -33,7 +33,13 @@ class QualityTests(unittest.TestCase):
 
     def test_recovery_uses_same_plan_without_high_proximity_requirement(self):
         b,m,f=self.fixture()
-        self.assertEqual(assess(b,m,f,['B'])['setup'],'회복 베이스')
+        for bar in b[-41:-21]:
+            bar.update(high=130,low=70)
+        for bar in b[-21:-1]:
+            bar.update(high=104,low=98)
+        q=assess(b,m,f,['B'])
+        self.assertEqual(q['setup'],'회복 베이스')
+        self.assertEqual(q['window_sessions'],20)
 
     def test_future_bars_do_not_change_quality(self):
         b=make_bars()

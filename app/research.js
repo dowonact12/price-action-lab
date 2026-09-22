@@ -15,6 +15,30 @@ function showResearch(row, metadata) {
   add('p','필수: 위험 폭 0.75–4 ATR 및 역치의 15% 이하, 범위비 ≤1.2, 역치까지 ≤2 ATR, 알려진 저항 여유 ≥1R. 추격 한도=역치+min(1 ATR, 0.5R). S=6항목 전부·이력 경고 없음, A=5개 이상, B=3개 이상, C=나머지 필수 통과.');
   add('p','미충족 항목이 상위 등급 확인 조건입니다. 저항 미확인은 통과로 계산하지 않습니다. 상대강도 백분위·뉴스·호가 검증은 아직 포함하지 않습니다.');
   add('p',q.note);
+  const plan=row.tracked_plan;
+  if(plan){
+    add('h3','등록 당시 가격선 · 고정 추적');
+    add('p',`${plan.registered_as_of} 등록 · ${plan.label} · ${plan.data_status}`);
+    add('p',`고정 역치 $${f(plan.trigger)} / 재접촉 구간 $${f(plan.zone_low)}–${f(plan.trigger)} / 종가 무효화 $${f(plan.invalidation)}. 위의 새 후보 계산값과 구분합니다.`);
+  }
+}
+
+async function showPlans(snapshotMode){
+  const host=document.getElementById('plan-content');
+  try{
+    const response=await fetch(snapshotMode?'data/plans.json':'/api/plans',{cache:'no-store'});
+    if(!response.ok)throw Error('아직 등록된 추적 계획이 없습니다.');
+    const data=await response.json();host.replaceChildren();
+    if(!data.plans.length){host.textContent='아직 등록된 추적 계획이 없습니다.';return;}
+    [...data.plans].reverse().forEach(plan=>{
+      const details=document.createElement('details'),summary=document.createElement('summary'),body=document.createElement('p');
+      summary.textContent=`${plan.symbol} · ${plan.label} · 등록 ${plan.registered_as_of}`;
+      body.textContent=`등록 등급 ${plan.grade} / ${plan.setup} · 역치 ${plan.trigger.toFixed(2)} · 지지구간 하단 ${plan.zone_low.toFixed(2)} · 무효화 ${plan.invalidation.toFixed(2)} · ${plan.data_status}`;
+      details.append(summary,body);
+      const events=document.createElement('p');events.textContent=plan.events.length?plan.events.map(e=>`${e.as_of}: ${e.label} (종가 ${e.close.toFixed(2)})`).join(' → '):'등록 이후 발생한 확정 이벤트 없음. 과거 돌파를 소급해서 기록하지 않습니다.';
+      details.append(events);host.append(details);
+    });
+  }catch(error){host.textContent=error.message;}
 }
 
 function frameObservation(bars, key) {

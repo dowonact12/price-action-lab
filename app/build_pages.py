@@ -20,6 +20,8 @@ def build(destination):
     target=destination/'data';target.mkdir(exist_ok=True)
     for name in ('latest.json','intraday.json','update-status.json','history.json'):
         shutil.copyfile(ROOT/'data'/name,target/name)
+    if (ROOT/'data'/'plans.json').exists():
+        shutil.copyfile(ROOT/'data'/'plans.json',target/'plans.json')
     snapshot=json.loads((target/'latest.json').read_text(encoding='utf-8'))
     charts=target/'charts';charts.mkdir(exist_ok=True)
     for row in snapshot['results']:

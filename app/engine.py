@@ -16,7 +16,7 @@ from setup_quality import assess
 REQUIRED_ADJUSTMENT_POLICY = "split_adjusted_ohlcv"
 ROUTE_A = "A"
 ROUTE_B = "B"
-ENGINE_VERSION = "us_daily_research_v4"
+ENGINE_VERSION = "us_daily_research_v5"
 
 
 def screening_history(raw_bars, as_of):
@@ -111,7 +111,9 @@ def calculate_metrics(bars: list[dict[str, float]]) -> dict[str, float]:
     low252 = min(bar["low"] for bar in window252)
     previous_volume20 = sum(bar["volume"] for bar in bars[-21:-1]) / 20.0
     prior_range = _range(bars[-10:-5])
-    if previous_volume20 <= 0 or prior_range <= 0:
+    if bars[-1]['volume'] == 0:
+        raise ValueError('latest session has zero volume; trading activity unconfirmed')
+    if previous_volume20 <= 0 or prior_range <= 0 or sum(b['volume'] for b in bars[-10:-5]) <= 0:
         raise ValueError("metric denominator is zero")
 
     metric_values = {
@@ -162,9 +164,11 @@ def _validated_bars(raw_bars: Any, as_of: str) -> tuple[list[dict[str, float]], 
             raise ValueError(f"duplicate bar date: {bar_date}")
         seen_dates.add(bar_date)
         bar = {
-            name: _number(raw.get(name), f"bars[{index}].{name}", positive=True)
+            name: _number(raw.get(name), f"bars[{index}].{name}", positive=name != 'volume')
             for name in ("open", "high", "low", "close", "volume")
         }
+        if bar['volume'] < 0:
+            raise ValueError(f"bars[{index}].volume must be nonnegative")
         if bar["high"] < max(bar["open"], bar["low"], bar["close"]):
             raise ValueError(f"bars[{index}].high is inconsistent")
         if bar["low"] > min(bar["open"], bar["high"], bar["close"]):

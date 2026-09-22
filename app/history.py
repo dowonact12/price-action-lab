@@ -6,8 +6,12 @@ from pathlib import Path
 
 def failure_category(row):
     reason = ' '.join(row.get('reasons', [])).lower()
-    if 'insufficient' in reason or '504 required' in reason:
-        return '이력 부족 / 오류 이후 워밍업 부족'
+    if '504 required' in reason:
+        return '오류 이후 연속 이력 부족'
+    if 'insufficient' in reason:
+        return '분석 이력 부족'
+    if 'zero volume' in reason:
+        return '최근 거래 활동 미확인'
     if 'stale data' in reason:
         return '기준일 불일치'
     if any(x in reason for x in ('http', 'timeout', 'timed out', 'not found', 'no chart', 'urlopen')):
@@ -30,7 +34,7 @@ def record_snapshot(data, snapshot):
     record = dict(as_of=meta['as_of'], observed_at=meta['generated_at'], rule_version=version,
                   requested=meta['universe_requested'], valid=meta['universe_valid'],
                   candidates=[dict(symbol=r['symbol'], routes=r['routes'], quality=r.get('quality'), close=r['metrics']['close'])
-                              for r in snapshot['results'] if r['status']=='ok' and (r.get('quality') if version in ('us_daily_research_v3', 'us_daily_research_v4') else r['routes'])])
+                              for r in snapshot['results'] if r['status']=='ok' and (r.get('quality') if 'quality' in r else r['routes'])])
     try:
         with path.open('x', encoding='utf-8') as stream:
             json.dump(record, stream, ensure_ascii=False, allow_nan=False)
