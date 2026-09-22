@@ -10,12 +10,13 @@ import math
 from datetime import date
 from typing import Any, Iterable
 from timeframes import chart_timeframes
+from setup_quality import assess
 
 
 REQUIRED_ADJUSTMENT_POLICY = "split_adjusted_ohlcv"
 ROUTE_A = "A"
 ROUTE_B = "B"
-ENGINE_VERSION = "us_daily_research_v2"
+ENGINE_VERSION = "us_daily_research_v3"
 
 
 def screening_history(raw_bars, as_of):
@@ -268,7 +269,9 @@ def evaluate_document(
                 raise ValueError(f"insufficient eligible history: {len(bars)} bars; 252 required")
             metrics = calculate_metrics(bars)
             routes, reasons = _routes(metrics, minimum_turnover, minimum_adr)
-            results.append({"symbol": symbol, "status": "ok", "reasons": reasons, "metrics": metrics, "routes": routes, "history_warning": warning, "charts": chart_timeframes(history, as_of)})
+            frames = chart_timeframes(history, as_of)
+            quality = assess(history, metrics, frames, routes, warning)
+            results.append({"quality": quality, "symbol": symbol, "status": "ok", "reasons": reasons, "metrics": metrics, "routes": routes, "history_warning": warning, "charts": frames})
         except (KeyError, TypeError, ValueError) as exc:
             results.append({"symbol": symbol, "status": "unknown", "reasons": [str(exc)], "metrics": {}, "routes": []})
 

@@ -61,6 +61,15 @@ function showTimeframes(row, metadata) {
       });
       [0, Math.floor((bars.length-1)/2), bars.length-1].filter((v,i,a)=>a.indexOf(v)===i).forEach(i=>add('text',{x:20+step*(i+.5),y:348,fill:'#9aacc4','font-size':14,'text-anchor':i===0?'start':i===bars.length-1?'end':'middle'},bars[i].start));
       describe(bars.at(-1));
+      if(row.quality){
+        const q=row.quality;
+        [[q.trigger,'실행 역치','#ffd078'],[q.invalidation,'종가 무효화','#ff8496'],[q.overhead,'과거 저항','#a9a0ff']].forEach(([value,label,color],i)=>{
+          if(!Number.isFinite(value))return;
+          // Current plan only: do not draw today's level across earlier history.
+          if(transform(value)>=lo&&transform(value)<=hi)add('line',{x1:895,x2:920,y1:y(value),y2:y(value),stroke:color,'stroke-width':2});
+          add('text',{x:430,y:12+i*16,fill:color,'font-size':12},`${label} ${value.toFixed(2)} · 현재 계획`);
+        });
+      }
     };
     range.onchange=render;scale.onchange=render;render();
   });

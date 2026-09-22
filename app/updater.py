@@ -150,7 +150,7 @@ def update_daily(symbols=None, resume=False):
 
 
 def monitor_row(row, quote):
-    value, level = quote['price'], row.get('reference_high20')
+    value, level = quote['price'], (row.get('quality') or {}).get('trigger', row.get('reference_high20'))
     finite = lambda x: isinstance(x, (int, float)) and not isinstance(x, bool) and math.isfinite(x) and x > 0
     state = '가격 확인 불가'
     if finite(value) and finite(level):
@@ -159,12 +159,17 @@ def monitor_row(row, quote):
         elif not quote['current_session'] or quote['age_seconds'] > 180:
             state = '시세 지연 · 판정 보류'
         elif value > level:
-            state = '최근 20일 고가 위'
+            state = '실행 역치 상회 관찰' if row.get('quality') else '최근 20일 고가 위'
         elif finite(quote['high']) and quote['high'] > level:
-            state = '20일 고가 상회 후 되밀림'
+            state = '실행 역치 상회 후 되밀림' if row.get('quality') else '20일 고가 상회 후 되밀림'
         else:
-            state = '최근 20일 고가 이하'
-    return dict(symbol=row['symbol'], **quote, reference_high20=level, state=state,
+            state = '실행 역치 이하' if row.get('quality') else '최근 20일 고가 이하'
+    if row.get('quality') and quote['market_open'] and quote['current_session'] and quote['age_seconds'] <= 180:
+        if value <= row['quality']['invalidation']:
+            state = '무효화선 이하 · 일봉 마감 확인 필요'
+        elif value > row['quality']['extension_limit']:
+            state = '추격 제외 영역'
+    return dict(symbol=row['symbol'], **quote, trigger=level, reference_high20=level, state=state,
                 distance_pct=(value/level-1)*100 if finite(value) and finite(level) else None,
                 reference_note='개발용 20일 고가. Jesse/Ian 피벗·진입·손절 판정 아님.')
 
