@@ -1,0 +1,94 @@
+name: Market data and Pages
+on:
+  workflow_dispatch:
+    inputs:
+      force_daily:
+        description: Refresh the full daily universe
+        type: boolean
+        default: false
+  schedule:
+    - cron: '2-57/5 13-22 * * 1-5'
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+  actions: write
+concurrency:
+  group: market-pages
+  cancel-in-progress: false
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: source
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Restore the last published observations
+        working-directory: source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          branch=$(git ls-remote --heads origin market-state)
+          if [ -n "$branch" ]; then
+            git fetch origin market-state --depth=1
+            git worktree add ../previous FETCH_HEAD
+            mkdir -p app/data
+            cp -a ../previous/data/. app/data/
+            mkdir -p app/data/history
+            python - <<'PY'
+          import json,pathlib
+          p=pathlib.Path('app/data/history.json')
+          if p.exists():
+              for r in json.loads(p.read_text())['records']:
+                  target=pathlib.Path('app/data/history')/(r['as_of']+'-'+r['rule_version']+'.json')
+                  target.write_text(json.dumps(r,ensure_ascii=False),encoding='utf-8')
+          PY
+          fi
+      - name: Verify calculations
+        working-directory: source
+        run: python -m unittest discover -s app -q
+      - name: Collect and build
+        id: collect
+        working-directory: source
+        env:
+          FORCE_DAILY: ${{ inputs.force_daily || 'false' }}
+        run: python app/scheduled_run.py
+      - uses: actions/configure-pages@v5
+        if: steps.collect.outputs.publish == 'true'
+      - uses: actions/upload-pages-artifact@v3
+        id: artifact
+        if: steps.collect.outputs.publish == 'true'
+        with:
+          path: source/dist
+          retention-days: 1
+      - uses: actions/deploy-pages@v4
+        id: deploy
+        if: steps.collect.outputs.publish == 'true'
+      - name: Preserve current data for the next run
+        if: steps.deploy.outcome == 'success'
+        working-directory: source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh auth setup-git
+          cd dist
+          git init -b market-state
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .
+          git commit -m 'Current market observations; historical observations retained in data/history.json'
+          git remote add origin "https://github.com/$GITHUB_REPOSITORY.git"
+          git push --force origin market-state
+      - name: Remove the temporary Pages artifact after deployment
+        if: always() && steps.deploy.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_ID: ${{ steps.artifact.outputs.artifact_id }}
+        run: gh api --method DELETE "repos/$GITHUB_REPOSITORY/actions/artifacts/$ARTIFACT_ID"
