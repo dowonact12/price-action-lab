@@ -16,7 +16,7 @@ from setup_quality import assess
 REQUIRED_ADJUSTMENT_POLICY = "split_adjusted_ohlcv"
 ROUTE_A = "A"
 ROUTE_B = "B"
-ENGINE_VERSION = "us_daily_research_v3"
+ENGINE_VERSION = "us_daily_research_v4"
 
 
 def screening_history(raw_bars, as_of):

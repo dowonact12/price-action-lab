@@ -30,7 +30,7 @@ def record_snapshot(data, snapshot):
     record = dict(as_of=meta['as_of'], observed_at=meta['generated_at'], rule_version=version,
                   requested=meta['universe_requested'], valid=meta['universe_valid'],
                   candidates=[dict(symbol=r['symbol'], routes=r['routes'], quality=r.get('quality'), close=r['metrics']['close'])
-                              for r in snapshot['results'] if r['status']=='ok' and (r.get('quality') if version == 'us_daily_research_v3' else r['routes'])])
+                              for r in snapshot['results'] if r['status']=='ok' and (r.get('quality') if version in ('us_daily_research_v3', 'us_daily_research_v4') else r['routes'])])
     try:
         with path.open('x', encoding='utf-8') as stream:
             json.dump(record, stream, ensure_ascii=False, allow_nan=False)

@@ -18,3 +18,6 @@ Enable Pages with source **GitHub Actions**, then run **Market data and Pages** 
 
 ## Scope
 Monthly, weekly, daily OHLCV charts; transparent filter checks; source links; forward candidate observations. No trade execution or validated profitability claim. Private subscriber articles, screenshots, and research collections are excluded.
+
+## Setup quality research policy
+S/A/B/C are transparent, uncalibrated setup grades, separate from legacy A/B prefilters. Only graded symbols appear in active lists. The screen shows each passed/failed condition and price-line provenance. Current trigger/invalidation uses the ten completed sessions BEFORE the observation bar. Monthly/weekly comparisons exclude unverified boundary periods. Confirmed historical swing highs before that contraction constrain overhead room; absence is unknown, not clear air. Each daily snapshot is a new research plan, not a persistent trade or instruction to move a stop. Relative strength percentile, retest/reclaim lifecycle and execution cost checks are not yet implemented. Subscriber material is never published.

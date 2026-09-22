@@ -34,6 +34,6 @@ async function showHistory(snapshotMode) {
     const note=document.createElement('p');note.textContent=data.note;host.append(note);
     [...data.records].reverse().forEach(record=>{const details=document.createElement('details'),summary=document.createElement('summary'),p=document.createElement('p');
       summary.textContent=`${record.as_of} · 후보 ${record.candidates.length}개 · 유효 ${record.valid}/${record.requested} · ${record.rule_version}`;
-      p.textContent=`최초 관찰 ${record.observed_at} — `+record.candidates.map(r=>{const t=(data.tracking||[]).find(t=>t.symbol===r.symbol&&t.observed_as_of===record.as_of&&t.rule_version===record.rule_version);return `${r.symbol} (${r.routes.join('+')}, $${r.close.toFixed(2)}) ${Number.isFinite(t?.change_pct)?t.change_pct.toFixed(2)+'%':t?.state||'후속 관찰 대기'}`}).join(' · ');details.append(summary,p);host.append(details);});
+      p.textContent=`최초 관찰 ${record.observed_at} — `+record.candidates.map(r=>{const t=(data.tracking||[]).find(t=>t.symbol===r.symbol&&t.observed_as_of===record.as_of&&t.rule_version===record.rule_version);return `${r.symbol} (${r.quality ? '등급 '+r.quality.grade : '이전 연구 경로 '+r.routes.join('+')}, $${r.close.toFixed(2)}) ${Number.isFinite(t?.change_pct)?t.change_pct.toFixed(2)+'%':t?.state||'후속 관찰 대기'}`}).join(' · ');details.append(summary,p);host.append(details);});
   } catch(e){host.textContent=e.message;}
 }

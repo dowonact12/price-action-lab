@@ -1,5 +1,5 @@
 """Explicit research policy, not an author's formula or a calibrated probability."""
-POLICY = 'setup-quality-v1'
+POLICY = 'setup-quality-v2'
 
 
 def assess(history, metrics, frames, routes, warning=None):
@@ -19,8 +19,8 @@ def assess(history, metrics, frames, routes, warning=None):
     volume = sum(b['volume'] for b in recent) / sum(b['volume'] for b in earlier)
     base_high = max(b['high'] for b in base)
     depth = 100 * (base_high - min(b['low'] for b in base)) / base_high
-    # Confirmed local highs, with two subsequent bars, from outside the base.
-    peaks = [prior[i]['high'] for i in range(2, len(prior)-60)
+    # Confirmed local highs, with two subsequent bars, from before the final contraction.
+    peaks = [prior[i]['high'] for i in range(2, len(prior)-10)
              if prior[i]['high'] > trigger and
              all(prior[i]['high'] >= prior[j]['high'] for j in (i-2, i-1, i+1, i+2))]
     overhead = min(peaks) if peaks else None
