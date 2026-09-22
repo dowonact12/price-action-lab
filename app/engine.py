@@ -16,7 +16,7 @@ from setup_quality import assess
 REQUIRED_ADJUSTMENT_POLICY = "split_adjusted_ohlcv"
 ROUTE_A = "A"
 ROUTE_B = "B"
-ENGINE_VERSION = "us_daily_research_v5"
+ENGINE_VERSION = "us_daily_research_v6"
 
 
 def screening_history(raw_bars, as_of):
@@ -43,10 +43,10 @@ def screening_history(raw_bars, as_of):
         except ValueError as exc:
             start, last_error = index + 1, str(exc)
     suffix = ordered[start:]
-    if start and len(suffix) < 504:
-        raise ValueError(f"recent invalid history: {last_error}; {len(suffix)} valid trailing bars; 504 required after a history break")
+    if not suffix:
+        raise ValueError(f"no valid trailing history: {last_error}")
     return suffix, ({'excluded_through': ordered[start-1]['date'], 'excluded_bars': start,
-                     'reason': last_error, 'note': '오류 봉 이전 이력 제외. 이후 연속 유효 504봉 이상으로 계산; 장기 차트 범위 축소.'} if start else None)
+                     'reason': last_error, 'note': '오류 봉 이전과 이후를 이어 붙이지 않음. 이후 보유 이력으로 가능한 지표만 계산.'} if start else None)
 
 
 def _number(value: Any, name: str, *, positive: bool = False) -> float:
@@ -99,54 +99,50 @@ def _range(bars: list[dict[str, float]]) -> float:
     return max(bar["high"] for bar in bars) - min(bar["low"] for bar in bars)
 
 
-def calculate_metrics(bars: list[dict[str, float]]) -> dict[str, float]:
-    """Calculate metrics from at least 252 validated, ascending daily bars."""
-    if len(bars) < 252:
-        raise ValueError("at least 252 eligible bars are required")
-
-    closes = [bar["close"] for bar in bars]
+def calculate_metrics(bars):
+    """Compute each standard indicator only when its own lookback is available."""
+    if not bars:
+        raise ValueError('no valid history')
+    n = len(bars)
+    closes = [b['close'] for b in bars]
     current = closes[-1]
-    window252 = bars[-252:]
-    high252 = max(bar["high"] for bar in window252)
-    low252 = min(bar["low"] for bar in window252)
-    previous_volume20 = sum(bar["volume"] for bar in bars[-21:-1]) / 20.0
-    prior_range = _range(bars[-10:-5])
     if bars[-1]['volume'] == 0:
         raise ValueError('latest session has zero volume; trading activity unconfirmed')
-    if previous_volume20 <= 0 or prior_range <= 0 or sum(b['volume'] for b in bars[-10:-5]) <= 0:
-        raise ValueError("metric denominator is zero")
-
-    metric_values = {
-        "close": current,
-        "ret21_pct": 100.0 * (current / closes[-22] - 1.0),
-        "ret63_pct": 100.0 * (current / closes[-64] - 1.0),
-        "ret126_pct": 100.0 * (current / closes[-127] - 1.0),
-        "ema10": _ema(closes, 10),
-        "ema20": _ema(closes, 20),
-        "ema50": _ema(closes, 50),
-        "ema100": _ema(closes, 100),
-        "sma200": sum(closes[-200:]) / 200.0,
-        "high252": high252,
-        "low252": low252,
-        "offHigh252_pct": 100.0 * (current / high252 - 1.0),
-        "aboveLow252_pct": 100.0 * (current / low252 - 1.0),
-        "ADR20_pct": 100.0 * sum(
-            (bar["high"] - bar["low"]) / bar["close"] for bar in bars[-20:]
-        ) / 20.0,
-        "ATR14_pct": 100.0 * _atr_wilder(bars, 14) / current,
-        "RVOL20_completed": bars[-1]["volume"] / previous_volume20,
-        "rangeRatio5": _range(bars[-5:]) / prior_range,
-        "volumeRatio5": (
-            sum(bar["volume"] for bar in bars[-5:])
-            / sum(bar["volume"] for bar in bars[-10:-5])
-        ),
-        "turnover20": sum(
-            bar["close"] * bar["volume"] for bar in bars[-20:]
-        ) / 20.0,
-    }
-    if not all(math.isfinite(value) for value in metric_values.values()):
-        raise ValueError("calculated metric is not finite")
-    return metric_values
+    def ratio(a, b):
+        return a/b if b > 0 else None
+    recent = bars[-20:]
+    observed_high = max(b['high'] for b in bars[-252:])
+    observed_low = min(b['low'] for b in bars[-252:])
+    adr = 100*sum((b['high']-b['low'])/b['close'] for b in recent)/len(recent)
+    turnover = sum(b['close']*b['volume'] for b in recent)/len(recent)
+    atr_period = min(14,n)
+    atr = 100*_atr_wilder(bars,atr_period)/current
+    metrics = dict(close=current, history_sessions=n,
+        observedHigh=observed_high, observedLow=observed_low,
+        offObservedHigh_pct=100*(current/observed_high-1),
+        aboveObservedLow_pct=100*(current/observed_low-1),
+        observedHigh_sessions=min(252,n), observedReturn_pct=100*(current/closes[0]-1),
+        observedMean=sum(closes[-20:])/len(closes[-20:]),
+        ADR_observed_pct=adr, turnover_observed=turnover, average_sessions=len(recent),
+        ATR_observed_pct=atr, atr_sessions=atr_period,
+        high252=observed_high if n>=252 else None,
+        low252=observed_low if n>=252 else None,
+        offHigh252_pct=100*(current/observed_high-1) if n>=252 else None,
+        aboveLow252_pct=100*(current/observed_low-1) if n>=252 else None,
+        sma200=sum(closes[-200:])/200 if n>=200 else None,
+        ADR20_pct=adr if n>=20 else None,
+        turnover20=turnover if n>=20 else None,
+        ATR14_pct=atr if n>=14 else None,
+        RVOL20_completed=ratio(bars[-1]['volume'],sum(b['volume'] for b in bars[-21:-1])/20) if n>=21 else None,
+        rangeRatio5=ratio(_range(bars[-5:]),_range(bars[-10:-5])) if n>=10 else None,
+        volumeRatio5=ratio(sum(b['volume'] for b in bars[-5:]),sum(b['volume'] for b in bars[-10:-5])) if n>=10 else None)
+    for period in (21,63,126):
+        metrics[f'ret{period}_pct']=100*(current/closes[-period-1]-1) if n>period else None
+    for period in (10,20,50,100):
+        metrics[f'ema{period}']=_ema(closes,period) if n>=period else None
+    if not all(v is None or math.isfinite(v) for v in metrics.values()):
+        raise ValueError('calculated metric is not finite')
+    return metrics
 
 
 def _validated_bars(raw_bars: Any, as_of: str) -> tuple[list[dict[str, float]], str | None]:
@@ -183,6 +179,20 @@ def _routes(
 ) -> tuple[list[str], list[str]]:
     routes: list[str] = []
     reasons: list[str] = []
+    if metrics['history_sessions'] < 252:
+        if metrics['turnover_observed'] < min_turnover:
+            reasons.append('보유 기간 평균 거래대금 미달')
+        if metrics['ADR_observed_pct'] < min_adr:
+            reasons.append('보유 기간 평균 변동폭 미달')
+        if metrics['history_sessions'] < 5:
+            reasons.append('가격 구조 관찰 중: 2봉씩의 수축 구간과 관찰봉이 아직 없음')
+        if not (metrics['close'] > metrics['observedMean'] and metrics['observedReturn_pct'] > 0):
+            reasons.append('보유 이력에서 상승 방향 미충족')
+        if metrics['offObservedHigh_pct'] < -25:
+            reasons.append('보유 기간 고점 대비 25% 초과 하락')
+        return ([] if reasons else ['SHORT']), reasons
+    if metrics['rangeRatio5'] is None:
+        return [], ['가격 범위비 계산 불가: 이전 구간 가격 범위가 0']
     common = []
     if metrics["turnover20"] < min_turnover:
         common.append("turnover20 below minimum")
@@ -269,13 +279,11 @@ def evaluate_document(
             bars, last_date = _validated_bars(history, as_of)
             if last_date != as_of:
                 raise ValueError(f"stale data: last eligible date {last_date}; expected {as_of}")
-            if len(bars) < 252:
-                raise ValueError(f"insufficient eligible history: {len(bars)} bars; 252 required")
             metrics = calculate_metrics(bars)
             routes, reasons = _routes(metrics, minimum_turnover, minimum_adr)
             frames = chart_timeframes(history, as_of)
             quality = assess(history, metrics, frames, routes, warning)
-            results.append({"quality": quality, "symbol": symbol, "status": "ok", "reasons": reasons, "metrics": metrics, "routes": routes, "history_warning": warning, "charts": frames})
+            results.append({"history_sessions": len(bars), "history_mode": "limited" if len(bars)<252 else "full", "unavailable_metrics": [k for k,v in metrics.items() if v is None], "quality": quality, "symbol": symbol, "status": "ok", "reasons": reasons, "metrics": metrics, "routes": routes, "history_warning": warning, "charts": frames})
         except (KeyError, TypeError, ValueError) as exc:
             results.append({"symbol": symbol, "status": "unknown", "reasons": [str(exc)], "metrics": {}, "routes": []})
 

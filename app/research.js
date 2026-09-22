@@ -3,17 +3,24 @@ function showResearch(row, metadata) {
   const host=document.getElementById('research');host.replaceChildren();
   const add=(tag,text,parent=host)=>{const el=document.createElement(tag);el.textContent=text;parent.append(el);return el;};
   const q=row.quality;
-  if(!q){add('p','현재 등급 기준 밖입니다.');return;}
+  add('h3',`보유 이력 ${row.history_sessions??'—'}봉 · 가능한 지표만 평가`);
+  const m=row.metrics||{},nf=v=>Number.isFinite(v)?v.toFixed(2):'계산 불가';
+  add('p',`보유 기간 ${m.average_sessions??'—'}봉 평균 거래대금 $${nf(m.turnover_observed)} · 평균 가격 범위 ${nf(m.ADR_observed_pct)}% · ${m.atr_sessions??'—'}봉 변동폭 ${nf(m.ATR_observed_pct)}%`);
+  const metricNames={ema10:'10일 EMA',ema20:'20일 EMA',ema50:'50일 EMA',ema100:'100일 EMA',sma200:'200일 SMA',high252:'252봉 고점',low252:'252봉 저점',offHigh252_pct:'252봉 고점 대비',aboveLow252_pct:'252봉 저점 대비',ret21_pct:'21거래일 수익률',ret63_pct:'63거래일 수익률',ret126_pct:'126거래일 수익률',ADR20_pct:'20봉 ADR',ATR14_pct:'14봉 ATR',RVOL20_completed:'20봉 비교 거래량',turnover20:'20봉 평균 거래대금',rangeRatio5:'5봉 가격 범위비',volumeRatio5:'5봉 거래량비'};
+  if(row.unavailable_metrics?.length)add('p','이력 또는 계산 분모 부족 · '+row.unavailable_metrics.map(k=>metricNames[k]||k).join(', '));
+  if(row.history_warning)add('p',row.history_warning.note);
+  if(!q){add('p','현재 등급 없음 · '+((row.reasons||[]).join(' · ')||'가격 구조·역치·위험 폭의 필수 조건 미충족'));return;}
   add('h3',`${q.grade} · ${q.setup} · 자리의 질`);
   add('p',`기준 ${q.as_of} · 가격선 계산 종료 ${q.level_as_of} · ${q.policy}`);
-  add('p','자체 정량화 연구 기준입니다. Jesse/Ian 원본 공식 또는 검증된 승률이 아닙니다. 기존 리더/회복 필터를 통과한 종목에만 적용하며 모든 셋업을 포괄하지 않습니다.').className='warning';
+  add('p','자체 정량화 연구 기준입니다. Jesse/Ian 원본 공식 또는 검증된 승률이 아닙니다. 리더·회복·단기 이력 수축을 구분하며 모든 셋업을 포괄하지 않습니다.').className='warning';
   const f=v=>Number.isFinite(v)?v.toFixed(2):'미확인';
   add('p',`실행 역치 $${f(q.trigger)} / 일봉 종가 무효화 $${f(q.invalidation)} / 추격 제외선 $${f(q.extension_limit)}`);
-  add('p',`60봉 구조 고점 $${f(q.structural_high)} / 과거 확인 저항 $${f(q.overhead)} / 저항 여유 ${f(q.room_r)}R`);
+  add('p',`${q.base_sessions??60}봉 구조 고점 $${f(q.structural_high)} / 과거 확인 저항 $${f(q.overhead)} / 저항 여유 ${f(q.room_r)}R`);
   add('p',`위험 폭 ${f(q.risk_pct)}% · ${f(q.risk_atr)} ATR / 역치 거리 ${f(q.distance_atr)} ATR / 범위비 ${f(q.contraction)} / 거래량비 ${f(q.volume_ratio)}`);
-  q.checks.forEach(c=>add('p',`${c.passed?'충족':'미충족'} · ${c.label}`));
-  add('p','필수: 위험 폭 0.75–4 ATR 및 역치의 15% 이하, 범위비 ≤1.2, 역치까지 ≤2 ATR, 알려진 저항 여유 ≥1R. 추격 한도=역치+min(1 ATR, 0.5R). S=6항목 전부·이력 경고 없음, A=5개 이상, B=3개 이상, C=나머지 필수 통과.');
+  q.checks.forEach(c=>add('p',`${c.passed===null?'평가 불가':c.passed?'충족':'미충족'} · ${c.label}`));
+  add('p','필수: 위험 폭 0.75–4 ATR 및 역치의 15% 이하, 범위비 ≤1.2, 역치까지 ≤2 ATR, 알려진 저항 여유 ≥1R. 추격 한도=역치+min(1 ATR, 0.5R). 평가 불가 항목은 미충족으로 세지 않습니다. S=6항목 전부·이력 경고 없음, A=평가 가능 4개 이상·80% 충족, B=평가 가능 3개 이상·50% 충족, C=나머지 필수 통과. 21봉 미만은 잠정 등급으로 최대 B.');
   add('p','미충족 항목이 상위 등급 확인 조건입니다. 저항 미확인은 통과로 계산하지 않습니다. 상대강도 백분위·뉴스·호가 검증은 아직 포함하지 않습니다.');
+  add('p',`평가 가능 ${q.evidence_count}/${q.total_checks}항목 · 변동폭 산출 ${q.volatility_sessions}봉. 짧은 이력을 장기 지표로 간주하지 않습니다.`);
   add('p',q.note);
   const plan=row.tracked_plan;
   if(plan){

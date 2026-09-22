@@ -47,12 +47,13 @@ class EngineTests(unittest.TestCase):
         expected = calculate_metrics([{k:v for k,v in b.items() if k != 'date'} for b in bars[51:]])
         self.assertEqual(row['metrics'], expected)
 
-    def test_history_break_requires_warmup_and_never_bridges(self):
+    def test_history_break_uses_available_suffix_without_bridging(self):
         bars = make_bars(800)
         bars[400]['volume'] = -1
         row = evaluate_document(document(bars))['results'][0]
-        self.assertEqual(row['status'], 'unknown')
-        self.assertIn('504 required', row['reasons'][0])
+        self.assertEqual(row['status'], 'ok')
+        self.assertEqual(row['history_sessions'],399)
+        self.assertEqual(row['charts']['daily'][0]['start'],bars[401]['date'])
 
     def test_formula_values_and_json_serializable(self):
         bars = make_bars()
@@ -118,13 +119,14 @@ class EngineTests(unittest.TestCase):
         self.assertEqual(item["routes"], [])
         self.assertIn("volume", item["reasons"][0])
 
-    def test_insufficient_history_after_as_of_is_unknown(self):
+    def test_short_history_after_as_of_is_retained(self):
         bars = make_bars()
         payload = document(bars)
         payload["metadata"]["as_of"] = bars[250]["date"]
         item = evaluate_document(payload)["results"][0]
-        self.assertEqual(item["status"], "unknown")
-        self.assertIn("252 required", item["reasons"][0])
+        self.assertEqual(item["status"], "ok")
+        self.assertEqual(item["history_sessions"],251)
+        self.assertIsNone(item["metrics"]["high252"])
 
     def test_stale_last_bar_is_unknown(self):
         bars = make_bars()
@@ -155,15 +157,16 @@ class EngineTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "source"):
             evaluate_document(payload)
 
-    def test_zero_metric_denominator_is_unknown(self):
+    def test_zero_denominator_only_disables_affected_metrics(self):
         bars = make_bars(step=0.0)
         for bar in bars:
             bar["high"] = bar["close"]
             bar["low"] = bar["close"]
             bar["open"] = bar["close"]
         item = evaluate_document(document(bars), min_turnover=0, min_adr=0)["results"][0]
-        self.assertEqual(item["status"], "unknown")
-        self.assertIn("denominator", item["reasons"][0])
+        self.assertEqual(item["status"], "ok")
+        self.assertIsNone(item["metrics"]["rangeRatio5"])
+        self.assertIsNone(item["quality"])
 
 
 if __name__ == "__main__":

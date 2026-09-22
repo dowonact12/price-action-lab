@@ -1,5 +1,5 @@
 """Explicit research policy, not an author's formula or a calibrated probability."""
-POLICY = 'setup-quality-v3'
+POLICY = 'setup-quality-v4'
 
 
 def assess(history, metrics, frames, routes, warning=None):
@@ -7,11 +7,19 @@ def assess(history, metrics, frames, routes, warning=None):
         return None
     # The observation bar cannot move its own trigger or invalidation line.
     prior = history[:-1]
-    window = 20 if 'B' in routes else 10
+    short = 'SHORT' in routes
+    window = min(10, len(prior)//2) if short else 20 if 'B' in routes else 10
+    if window < 2 or len(prior) < 2*window:
+        return None
     recent, earlier, base = prior[-window:], prior[-2*window:-window], prior[-60:]
     trigger = max(b['high'] for b in recent)
     stop = min(b['low'] for b in recent)
-    atr = metrics['close'] * metrics['ATR14_pct'] / 100
+    atr_pct = metrics.get('ATR14_pct')
+    if atr_pct is None:
+        atr_pct = metrics.get('ATR_observed_pct')
+    if atr_pct is None:
+        return None
+    atr = metrics['close'] * atr_pct / 100
     risk = trigger - stop
     previous_range = max(b['high'] for b in earlier) - min(b['low'] for b in earlier)
     if atr <= 0 or risk <= 0 or previous_range <= 0:
@@ -39,19 +47,24 @@ def assess(history, metrics, frames, routes, warning=None):
         return None
     def rising(key):
         bars = [b for b in frames[key] if not b.get('boundary_unverified')]
-        return len(bars) >= 4 and bars[-1]['close'] > bars[-4]['close']
+        return bars[-1]['close'] > bars[-4]['close'] if len(bars) >= 4 else None
     checks = [
         (f'최근 {window}봉 가격 범위 ≤ 이전 {window}봉의 75%', contraction <= .75),
         (f'최근 {window}봉 거래량 ≤ 이전 {window}봉의 80%', volume <= .8),
         ('확정 주봉 종가 > 3개 주봉 전', rising('weekly')),
         ('확정 월봉 종가 > 3개 월봉 전', rising('monthly')),
         ('역치까지 1 ATR 이내 · 돌파 후 0.25 ATR 이내', -.25 <= distance <= 1),
-        ('확인된 과거 저항까지 2R 이상', room is not None and room >= 2),
+        ('확인된 과거 저항까지 2R 이상', room >= 2 if room is not None else None),
     ]
-    count = sum(ok for _, ok in checks)
-    grade = 'S' if count == 6 and not warning else 'A' if count >= 5 else 'B' if count >= 3 else 'C'
+    known = [ok for _, ok in checks if ok is not None]
+    count = sum(known)
+    grade = 'S' if count == 6 and not warning else 'A' if len(known)>=4 and count/len(known)>=.8 else 'B' if len(known)>=3 and count/len(known)>=.5 else 'C'
+    if len(history) < 21 and grade in ('S','A'):
+        grade = 'B'
     return dict(policy=POLICY, grade=grade, rank={'S':4,'A':3,'B':2,'C':1}[grade],
-                setup='회복 베이스' if 'B' in routes else '리더 수축',
+                setup='단기 이력 수축' if short else '회복 베이스' if 'B' in routes else '리더 수축',
+                evidence_count=len(known), total_checks=len(checks), history_sessions=len(history),
+                volatility_sessions=min(14,len(history)), base_sessions=len(base),
                 as_of=history[-1]['date'], level_as_of=prior[-1]['date'],
                 window_start=recent[0]['date'], window_sessions=window,
                 trigger=trigger, invalidation=stop, zone_low=trigger-min(.25*atr, .25*risk),
